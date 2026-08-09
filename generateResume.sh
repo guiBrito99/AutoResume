@@ -1,5 +1,42 @@
 #!/bin/bash
 
+# 0. Verify and install dependencies
+echo -e "Checking and installing dependencies...\n"
+
+check_install() {
+    if ! command -v "$1" &> /dev/null; then
+        echo "❌ $1 is not installed. Attempting to install..."
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y "$2"
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y "$2"
+        elif command -v pacman &> /dev/null; then
+            sudo pacman -S --noconfirm "$2"
+        elif command -v brew &> /dev/null; then
+            brew install "$2"
+        else
+            echo "Please install $1 manually. Package manager not found."
+            exit 1
+        fi
+    else
+        echo "✅ $1 is already installed."
+    fi
+}
+
+check_install "jq" "jq"
+check_install "curl" "curl"
+check_install "java" "default-jre"
+
+# Ollama uses a dedicated install script
+if ! command -v ollama &> /dev/null; then
+    echo "❌ ollama is not installed. Attempting to install..."
+    curl -fsSL https://ollama.com/install.sh | sh
+else
+    echo "✅ ollama is already installed."
+fi
+
+echo -e "\nAll dependencies are satisfied. Proceeding...\n"
+
 # 1. Ask for the name of the job title
 read -p "Enter the job title (this will be used as the folder name): " JOB_TITLE
 
