@@ -37,7 +37,28 @@ fi
 
 echo -e "\nAll dependencies are satisfied. Proceeding...\n"
 
-# 1. Ask for the name of the job title
+# 1. Select LLM Model
+echo -e "Checking available Ollama models...\n"
+AVAILABLE_MODELS=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}')
+
+if [ -z "$AVAILABLE_MODELS" ]; then
+    echo "❌ No models found in Ollama."
+    echo "Please download a model manually (e.g., 'ollama pull deepseek-r1') and run the script again."
+    exit 1
+else
+    echo "Available models:"
+    PS3="Enter the number of the model you want to use: "
+    select SELECTED_MODEL in $AVAILABLE_MODELS; do
+        if [ -n "$SELECTED_MODEL" ]; then
+            echo -e "✅ Selected model: $SELECTED_MODEL\n"
+            break
+        else
+            echo "❌ Invalid selection. Please try again."
+        fi
+    done
+fi
+
+# 2. Ask for the name of the job title
 read -p "Enter the job title (this will be used as the folder name): " JOB_TITLE
 
 # Clean up the folder name by replacing spaces with underscores
@@ -45,7 +66,7 @@ DIR_NAME=$(echo "$JOB_TITLE" | tr ' ' '_')
 mkdir -p "$DIR_NAME"
 echo -e "\nFolder ready: $DIR_NAME\n"
 
-# 2. Handle Personal Data
+# 3. Handle Personal Data
 if [ -f "$DIR_NAME/personalData.txt" ]; then
     echo "✅ Found existing personalData.txt in '$DIR_NAME'. Skipping extraction..."
 elif [ -f "./personalData.txt" ]; then
@@ -66,7 +87,7 @@ else
 fi
 echo ""
 
-# 3. Handle Job Description
+# 4. Handle Job Description
 if [ -f "$DIR_NAME/jobDescription.txt" ]; then
     echo "✅ Found existing jobDescription.txt in '$DIR_NAME'. Skipping manual entry..."
 else
@@ -77,7 +98,7 @@ else
 fi
 echo ""
 
-# 4. Handle Structure Rules
+# 5. Handle Structure Rules
 if [ -f "$DIR_NAME/structureRules.txt" ]; then
     echo "✅ Found existing structureRules.txt in '$DIR_NAME'. Skipping manual entry..."
 elif [ -f "./structureRules.txt" ]; then
@@ -91,7 +112,7 @@ else
 fi
 echo ""
 
-# 5. Handle Persona
+# 6. Handle Persona
 if [ -f "$DIR_NAME/persona.txt" ]; then
     echo "✅ Found existing persona.txt in '$DIR_NAME'. Skipping manual entry..."
 elif [ -f "./persona.txt" ]; then
@@ -105,13 +126,13 @@ else
 fi
 echo ""
 
-# 6. Read the contents of the files into variables for Ollama
+# 7. Read the contents of the files into variables for Ollama
 PERSONAL_DATA=$(cat "$DIR_NAME/personalData.txt")
 JOB_DESC=$(cat "$DIR_NAME/jobDescription.txt")
 RULES=$(cat "$DIR_NAME/structureRules.txt")
 SYSTEM_PROMPT=$(cat "$DIR_NAME/persona.txt")
 
-# 7. Call Ollama (DeepSeek-R1)
+# 8. Call Ollama
 echo "Feeding data to Ollama to generate the resume..."
 
 # Combine the three files into the user prompt
@@ -126,9 +147,9 @@ $JOB_DESC
 === Structure Rules ===
 $RULES"
 
-# Construct the JSON payload securely using jq
+# Construct the JSON payload securely using jq, injecting the selected model
 PAYLOAD=$(jq -n \
-  --arg model "deepseek-r1" \
+  --arg model "$SELECTED_MODEL" \
   --arg sys "$SYSTEM_PROMPT" \
   --arg prompt "$USER_PROMPT" \
   '{model: $model, system: $sys, prompt: $prompt, stream: false}')

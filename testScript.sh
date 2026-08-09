@@ -98,8 +98,8 @@ Nice to Have:
 - Familiarity with CI/CD pipelines.
 EOF
 
-# 6 - Run generateResume.sh and force the first command to be "test"
-echo "test" | bash generateResume.sh
+# 6 - Run generateResume.sh, passing "1" (for the first model) and "test" (for the folder name)
+echo -e "1\ntest" | bash generateResume.sh
 
 # 7 - Cleanup the generated root files while leaving the copies in the test folder intact
 rm persona.txt structureRules.txt database.sqlite
