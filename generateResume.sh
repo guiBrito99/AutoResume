@@ -16,7 +16,15 @@ elif [ -f "./personalData.txt" ]; then
     cp "./personalData.txt" "$DIR_NAME/personalData.txt"
 else
     echo "Extracting personal data from database..."
-    java -jar --enable-native-access=ALL-UNNAMED sqlite-manager-complete.jar print > "$DIR_NAME/personalData.txt"
+    DB_OUTPUT=$(java --enable-native-access=ALL-UNNAMED -jar sqlite-manager-complete.jar print)
+
+    if [[ "$DB_OUTPUT" == *"No table to print"* ]]; then
+        echo "❌ Error: The database is empty (returned 'No table to print')."
+        echo "Please populate the database before generating a resume."
+        exit 1
+    fi
+
+    echo "$DB_OUTPUT" > "$DIR_NAME/personalData.txt"
     echo -e "Saved to $DIR_NAME/personalData.txt"
 fi
 echo ""
@@ -46,16 +54,28 @@ else
 fi
 echo ""
 
-# 5. Read the contents of the files into variables for Ollama
+# 5. Handle Persona
+if [ -f "$DIR_NAME/persona.txt" ]; then
+    echo "✅ Found existing persona.txt in '$DIR_NAME'. Skipping manual entry..."
+elif [ -f "./persona.txt" ]; then
+    echo "✅ Found master persona.txt in root folder. Copying to '$DIR_NAME'..."
+    cp "./persona.txt" "$DIR_NAME/persona.txt"
+else
+    echo "Please paste the Persona instructions below."
+    echo "(When you are finished pasting, press Ctrl+D on a new empty line to save):"
+    cat > "$DIR_NAME/persona.txt"
+    echo -e "\nSaved to $DIR_NAME/persona.txt"
+fi
+echo ""
+
+# 6. Read the contents of the files into variables for Ollama
 PERSONAL_DATA=$(cat "$DIR_NAME/personalData.txt")
 JOB_DESC=$(cat "$DIR_NAME/jobDescription.txt")
 RULES=$(cat "$DIR_NAME/structureRules.txt")
+SYSTEM_PROMPT=$(cat "$DIR_NAME/persona.txt")
 
-# 6. Call Ollama (DeepSeek-R1)
+# 7. Call Ollama (DeepSeek-R1)
 echo "Feeding data to Ollama to generate the resume..."
-
-# Define the persona exactly as requested
-SYSTEM_PROMPT="Atue como um Especialista Sênior em Currículos ATS (Applicant Tracking System) e Aquisição de Talentos. Seu objetivo é analisar os três arquivos que fornecerei e elaborar um currículo perfeitamente otimizado para os algoritmos de triagem e altamente atraente para recrutadores humanos."
 
 # Combine the three files into the user prompt
 USER_PROMPT="Aqui estão os dados:
