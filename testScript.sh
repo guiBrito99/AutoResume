@@ -1,11 +1,33 @@
 #!/bin/bash
 
-# 1 - Populate the database (Integrated logic)
 # Color formatting
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
+RED='\033[0;31m'
 NC='\033[0m'
+
+# Test bookkeeping
+PASS=0
+FAIL=0
+
+check() { # check <name> <command-string>
+    local name="$1" cond="$2"
+    if bash -c "$cond"; then
+        echo -e "${GREEN}  PASS: $name${NC}"
+        PASS=$((PASS + 1))
+    else
+        echo -e "${RED}  FAIL: $name${NC}"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+# Robust cleanup: run on every exit, even mid-test failures
+cleanup() {
+    rm -f persona.txt structureRules.txt database.sqlite edge_out.txt main_out.txt
+    rm -rf edge_db edge_title edge_job
+}
+trap cleanup EXIT
 
 # Setup paths and JVM arguments
 JAR_PATH="sqlite-manager-complete.jar"
@@ -68,10 +90,9 @@ cat << 'EOF' > structureRules.txt
 - Do not include references, hobbies, or objective statements.
 EOF
 
-# 4 - Create the folder test
+# 4 - Create the folder test with its job description
 mkdir -p test
 
-# 5 - Create jobDescription.txt inside the test folder
 cat << 'EOF' > test/jobDescription.txt
 Job Title: Backend Systems Engineer
 Company: AuraSphere Dynamics
@@ -98,8 +119,42 @@ Nice to Have:
 - Familiarity with CI/CD pipelines.
 EOF
 
-# 6 - Run generateResume.sh, passing "1" (for the first model) and "test" (for the folder name)
-echo -e "1\ntest" | bash generateResume.sh
+# 5 - Main happy-path run: pass "1" (first model) and "test" (folder name)
+echo -e "\n${CYAN}=== Running generateResume.sh (happy path) ===${NC}"
+printf '1\ntest\n' | bash generateResume.sh > main_out.txt 2>&1
+MAIN_CODE=$?
 
-# 7 - Cleanup the generated root files while leaving the copies in the test folder intact
-rm persona.txt structureRules.txt database.sqlite
+check "exits successfully" "test $MAIN_CODE -eq 0"
+check "creates resume.txt" 'test -s test/resume.txt'
+check "resume mentions the candidate" 'grep -qi "jane" test/resume.txt'
+check "resume is Markdown-formatted" 'grep -qE "^#|^##|^- " test/resume.txt'
+
+# 6 - Edge case: empty job title
+echo -e "\n${CYAN}=== Edge case: empty job title ===${NC}"
+printf '1\n\n' | bash generateResume.sh > edge_out.txt 2>&1
+EDGE_TITLE_CODE=$?
+check "rejects empty job title" "test $EDGE_TITLE_CODE -ne 0"
+check "prints job-title error" 'grep -q "Job title cannot be empty" edge_out.txt'
+
+# 7 - Edge case: empty pasted job description
+echo -e "\n${CYAN}=== Edge case: empty pasted job description ===${NC}"
+printf '1\nedge_job\n' | bash generateResume.sh > edge_out.txt 2>&1
+EDGE_JOB_CODE=$?
+check "rejects empty job description" "test $EDGE_JOB_CODE -ne 0"
+check "prints job-description error" 'grep -q "jobDescription.txt is empty" edge_out.txt'
+
+# 8 - Edge case: empty database
+echo -e "\n${CYAN}=== Edge case: empty database ===${NC}"
+rm -f database.sqlite
+printf '1\nedge_db\n' | bash generateResume.sh > edge_out.txt 2>&1
+EDGE_DB_CODE=$?
+check "rejects empty database" "test $EDGE_DB_CODE -ne 0"
+check "prints empty-database error" 'grep -q "database is empty" edge_out.txt'
+
+# 9 - Summary + cleanup (trap removes root artifacts)
+echo -e "\n${CYAN}=== Results ===${NC}"
+echo -e "${GREEN}${PASS} passed${NC} | ${RED}${FAIL} failed${NC}"
+if [ "$FAIL" -gt 0 ]; then
+    exit 1
+fi
+echo -e "\nInspect the generated resume at test/resume.txt"
