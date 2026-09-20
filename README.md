@@ -28,6 +28,10 @@ Instead of manually rewriting your resume for every application, this project ac
 
 The opencode server is started automatically if one isn't already reachable at `http://localhost:4096`. Override with the `OPENCODE_URL` and `OPENCODE_PORT` environment variables.
 
+### Using local Ollama models
+
+The bundled `opencode.json` registers Ollama as a provider (`http://localhost:11434/v1`), so models you pull locally show up in the model picker. Add a new model pulled with `ollama pull <model>:<tag>` to the `models` map in `opencode.json`.
+
 ## 🚀 Quick Start
 
 1. Ensure your `sqlite-manager-complete.jar` and `generateResume.sh` are in the same root directory.

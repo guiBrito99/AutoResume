@@ -119,9 +119,36 @@ Nice to Have:
 - Familiarity with CI/CD pipelines.
 EOF
 
-# 5 - Main happy-path run: pass "1" (first model) and "test" (folder name)
+# 5 - Choose which model to run the test against
+MODEL_CHOICE="${TEST_MODEL:-}"
+if [ -z "$MODEL_CHOICE" ]; then
+    AVAILABLE_MODELS=$(opencode models 2>/dev/null)
+    if [ -z "$AVAILABLE_MODELS" ]; then
+        echo -e "${RED}❌ No models available. Run 'opencode auth login' or add a provider first.${NC}"
+        exit 1
+    fi
+    if [ -t 0 ]; then
+        echo -e "\n${CYAN}Available models:${NC}"
+        nl -w2 -s'. ' <<< "$AVAILABLE_MODELS"
+        read -r -p "Enter the number of the model to test (default: 1): " MODEL_CHOICE
+        MODEL_CHOICE="${MODEL_CHOICE:-1}"
+    else
+        MODEL_CHOICE=1
+    fi
+fi
+
+case "$MODEL_CHOICE" in
+    *[!0-9]* | "")
+        echo -e "${YELLOW}Invalid model choice '$MODEL_CHOICE'; falling back to model 1.${NC}"
+        MODEL_CHOICE=1
+        ;;
+esac
+
+echo -e "Using model selection: $MODEL_CHOICE ($(opencode models 2>/dev/null | sed -n "${MODEL_CHOICE}p"))"
+
+# 6 - Main happy-path run: pass the selected model and "test" (folder name)
 echo -e "\n${CYAN}=== Running generateResume.sh (happy path) ===${NC}"
-printf '1\ntest\n' | bash generateResume.sh > main_out.txt 2>&1
+printf '%s\ntest\n' "$MODEL_CHOICE" | bash generateResume.sh > main_out.txt 2>&1
 MAIN_CODE=$?
 
 check "exits successfully" "test $MAIN_CODE -eq 0"
@@ -129,29 +156,29 @@ check "creates resume.txt" 'test -s test/resume.txt'
 check "resume mentions the candidate" 'grep -qi "jane" test/resume.txt'
 check "resume is Markdown-formatted" 'grep -qE "^#|^##|^- " test/resume.txt'
 
-# 6 - Edge case: empty job title
+# 7 - Edge case: empty job title
 echo -e "\n${CYAN}=== Edge case: empty job title ===${NC}"
-printf '1\n\n' | bash generateResume.sh > edge_out.txt 2>&1
+printf '%s\n\n' "$MODEL_CHOICE" | bash generateResume.sh > edge_out.txt 2>&1
 EDGE_TITLE_CODE=$?
 check "rejects empty job title" "test $EDGE_TITLE_CODE -ne 0"
 check "prints job-title error" 'grep -q "Job title cannot be empty" edge_out.txt'
 
-# 7 - Edge case: empty pasted job description
+# 8 - Edge case: empty pasted job description
 echo -e "\n${CYAN}=== Edge case: empty pasted job description ===${NC}"
-printf '1\nedge_job\n' | bash generateResume.sh > edge_out.txt 2>&1
+printf '%s\nedge_job\n' "$MODEL_CHOICE" | bash generateResume.sh > edge_out.txt 2>&1
 EDGE_JOB_CODE=$?
 check "rejects empty job description" "test $EDGE_JOB_CODE -ne 0"
 check "prints job-description error" 'grep -q "jobDescription.txt is empty" edge_out.txt'
 
-# 8 - Edge case: empty database
+# 9 - Edge case: empty database
 echo -e "\n${CYAN}=== Edge case: empty database ===${NC}"
 rm -f database.sqlite
-printf '1\nedge_db\n' | bash generateResume.sh > edge_out.txt 2>&1
+printf '%s\nedge_db\n' "$MODEL_CHOICE" | bash generateResume.sh > edge_out.txt 2>&1
 EDGE_DB_CODE=$?
 check "rejects empty database" "test $EDGE_DB_CODE -ne 0"
 check "prints empty-database error" 'grep -q "database is empty" edge_out.txt'
 
-# 9 - Summary + cleanup (trap removes root artifacts)
+# 10 - Summary + cleanup (trap removes root artifacts)
 echo -e "\n${CYAN}=== Results ===${NC}"
 echo -e "${GREEN}${PASS} passed${NC} | ${RED}${FAIL} failed${NC}"
 if [ "$FAIL" -gt 0 ]; then

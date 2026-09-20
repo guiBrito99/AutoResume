@@ -18,8 +18,9 @@ AutoResume is a privacy-first, offline resume generator. It acts as a "reverse A
 | File | Purpose |
 |---|---|
 | `generateResume.sh` | Main pipeline entry point. Installs deps, starts/attaches to an opencode server, lets user pick a model (via `opencode models`), takes a job title, gathers per-job context files, builds the JSON payload, posts it to the opencode API, writes `resume.txt`. |
-| `testScript.sh` | Self-contained end-to-end test. Creates + populates a SQLite DB (Profile/Education/Experience/Skills), writes sample `persona.txt` and `structureRules.txt`, feeds a sample job description through `generateResume.sh` non-interactively, then runs edge-case checks (empty job title, empty job description, empty DB) and cleans up. 10 assertions, PASS/FAIL summary. |
+| `testScript.sh` | Self-contained end-to-end test. Creates + populates a SQLite DB (Profile/Education/Experience/Skills), writes sample `persona.txt` and `structureRules.txt`, feeds a sample job description through `generateResume.sh` non-interactively, then runs edge-case checks (empty job title, empty job description, empty DB) and cleans up. Lets the user pick which model to test (`TEST_MODEL=<n>` env var, or an interactive prompt when stdin is a TTY; defaults to the first model). 10 assertions, PASS/FAIL summary. |
 | `sqlite-manager-complete.jar` | Bundled Java CLI doing SQLite `create`, `insert`, `print`, etc. |
+| `opencode.json` | Project-level opencode config declaring the `ollama` provider (`@ai-sdk/openai-compatible` against `http://localhost:11434/v1`) so `opencode models` lists local Ollama models. Entry points: `generateResume.sh` (pipeline), `testScript.sh` (tests). |
 | `README.md` | User-facing docs. |
 | `AGENTS.md` | This file. |
 
@@ -47,6 +48,10 @@ Master templates (`personalData.txt`, `structureRules.txt`, `persona.txt`) place
    - `tools: {}` is **required** to disable agent tool calls — otherwise the model may try to write files itself instead of returning the resume text.
 5. **Extract answer** via `jq -r '[.parts[] | select(.type == "text") | .text] | join("")'`, filtering out `reasoning`/`step-start`/`step-finish` parts.
 6. Error checks: HTTP status != 200, `.error` key, or empty extracted text all abort with a message.
+
+## Local models via Ollama
+
+The project-level `opencode.json` registers an `ollama` provider so locally pulled models appear in the `opencode models` picker (and therefore in `generateResume.sh` step 2). Model entries there are **static** — every `ollama pull <model>:<tag>` must be mirrored as a `"<model>:<tag>": {}` key, or it won't be listed. Model IDs keep their tag (e.g. `ollama/gemma4:e2b` → `providerID=ollama`, `modelID=gemma4:e2b`); `generateResume.sh` splits on the first `/`, so `:` in the model ID is safe.
 
 ## Key Conventions & Gotchas
 

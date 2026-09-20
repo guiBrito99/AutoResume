@@ -20,18 +20,27 @@ echo -e "Checking and installing dependencies...\n"
 check_install() {
     if ! command -v "$1" &> /dev/null; then
         echo "❌ $1 is not installed. Attempting to install..."
-        if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y "$2"
-        elif command -v dnf &> /dev/null; then
-            sudo dnf install -y "$2"
-        elif command -v pacman &> /dev/null; then
-            sudo pacman -S --noconfirm "$2"
-        elif command -v brew &> /dev/null; then
-            brew install "$2"
-        else
-            echo "Please install $1 manually. Package manager not found."
+        if [ -n "$2" ]; then
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y "$2"
+            elif command -v dnf &> /dev/null; then
+                sudo dnf install -y "$2"
+            elif command -v pacman &> /dev/null; then
+                sudo pacman -S --noconfirm "$2"
+            elif command -v brew &> /dev/null; then
+                brew install "$2"
+            fi
+        fi
+        if ! command -v "$1" &> /dev/null && [ -n "$3" ]; then
+            echo "Installing $1 via curl installer..."
+            curl -fsSL "$3" | bash
+        fi
+        if ! command -v "$1" &> /dev/null; then
+            echo "❌ Failed to install $1. Please install it manually:"
+            [ -n "$4" ] && echo "  $4"
             exit 1
         fi
+        echo "✅ $1 installed successfully."
     else
         echo "✅ $1 is already installed."
     fi
@@ -40,14 +49,7 @@ check_install() {
 check_install "jq" "jq"
 check_install "curl" "curl"
 check_install "java" "default-jre"
-
-if ! command -v opencode &> /dev/null; then
-    echo "❌ opencode is not installed."
-    echo "Please install it following the instructions at https://opencode.ai/docs/"
-    exit 1
-else
-    echo "✅ opencode is already installed ($(opencode --version))."
-fi
+check_install "opencode" "" "https://opencode.ai/install" "https://opencode.ai/docs/"
 
 echo -e "\nAll dependencies are satisfied. Proceeding...\n"
 
