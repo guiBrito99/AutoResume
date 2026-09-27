@@ -2,5 +2,8 @@
 *
 !.gitignore
 !generateResume.sh
+!installDependencies.sh
+!JavaResumeBuilder.java
+!testScript.sh
 !README.md
 !sqlite-manager-complete.jar

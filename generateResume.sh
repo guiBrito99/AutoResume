@@ -14,42 +14,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 0. Verify and install dependencies
+# 0. Resolve dependencies
 echo -e "Checking and installing dependencies...\n"
 
-check_install() {
-    if ! command -v "$1" &> /dev/null; then
-        echo "❌ $1 is not installed. Attempting to install..."
-        if [ -n "$2" ]; then
-            if command -v apt-get &> /dev/null; then
-                sudo apt-get update && sudo apt-get install -y "$2"
-            elif command -v dnf &> /dev/null; then
-                sudo dnf install -y "$2"
-            elif command -v pacman &> /dev/null; then
-                sudo pacman -S --noconfirm "$2"
-            elif command -v brew &> /dev/null; then
-                brew install "$2"
-            fi
-        fi
-        if ! command -v "$1" &> /dev/null && [ -n "$3" ]; then
-            echo "Installing $1 via curl installer..."
-            curl -fsSL "$3" | bash
-        fi
-        if ! command -v "$1" &> /dev/null; then
-            echo "❌ Failed to install $1. Please install it manually:"
-            [ -n "$4" ] && echo "  $4"
-            exit 1
-        fi
-        echo "✅ $1 installed successfully."
-    else
-        echo "✅ $1 is already installed."
-    fi
-}
-
-check_install "jq" "jq"
-check_install "curl" "curl"
-check_install "java" "default-jre"
-check_install "opencode" "" "https://opencode.ai/install" "https://opencode.ai/docs/"
+bash installDependencies.sh || exit 1
 
 echo -e "\nAll dependencies are satisfied. Proceeding...\n"
 
@@ -166,64 +134,41 @@ if [ ! -s "$DIR_NAME/jobDescription.txt" ]; then
 fi
 echo ""
 
-# 6. Handle Structure Rules
-if [ -f "$DIR_NAME/structureRules.txt" ]; then
-    echo "✅ Found existing structureRules.txt in '$DIR_NAME'. Skipping manual entry..."
-elif [ -f "./structureRules.txt" ]; then
-    echo "✅ Found master structureRules.txt in root folder. Copying to '$DIR_NAME'..."
-    cp "./structureRules.txt" "$DIR_NAME/structureRules.txt"
-else
-    echo "Please paste the Structure Rules below."
-    echo "(When you are finished pasting, press Ctrl+D on a new empty line to save):"
-    cat > "$DIR_NAME/structureRules.txt"
-    echo -e "\nSaved to $DIR_NAME/structureRules.txt"
-fi
-
-if [ ! -s "$DIR_NAME/structureRules.txt" ]; then
-    echo "❌ Error: structureRules.txt is empty. Provide at least a few formatting constraints."
-    exit 1
-fi
-echo ""
-
-# 7. Handle Persona
-if [ -f "$DIR_NAME/persona.txt" ]; then
-    echo "✅ Found existing persona.txt in '$DIR_NAME'. Skipping manual entry..."
-elif [ -f "./persona.txt" ]; then
-    echo "✅ Found master persona.txt in root folder. Copying to '$DIR_NAME'..."
-    cp "./persona.txt" "$DIR_NAME/persona.txt"
-else
-    echo "Please paste the Persona instructions below."
-    echo "(When you are finished pasting, press Ctrl+D on a new empty line to save):"
-    cat > "$DIR_NAME/persona.txt"
-    echo -e "\nSaved to $DIR_NAME/persona.txt"
-fi
-
-if [ ! -s "$DIR_NAME/persona.txt" ]; then
-    echo "❌ Error: persona.txt is empty. Provide instructions describing the LLM's role."
-    exit 1
-fi
-echo ""
-
-# 8. Read the contents of the files into variables for opencode
+# 6. Read the contents of the files into variables for opencode
 PERSONAL_DATA=$(cat "$DIR_NAME/personalData.txt")
 JOB_DESC=$(cat "$DIR_NAME/jobDescription.txt")
-RULES=$(cat "$DIR_NAME/structureRules.txt")
-SYSTEM_PROMPT=$(cat "$DIR_NAME/persona.txt")
 
-# 9. Call opencode
-echo "Feeding data to opencode to generate the resume..."
+# 7. Ask opencode for the job matches
+echo "Feeding data to opencode to find the job matches..."
 
-# Combine the three files into the user prompt
-USER_PROMPT="Aqui estão os dados:
+USER_PROMPT="Your task is to compare the Job Description against the Personal Data and report only the matches.
+
+Rules:
+- Report MATCHES ONLY. Never list gaps, missing requirements, or anything the candidate lacks.
+- Group the matches into exactly three categories, in this fixed order: experience, education, skills.
+- Every category must be an array; use an empty array when there is no match for it.
+- Each match is an object with:
+  - \"requirement\": the exact requirement or keyword quoted from the Job Description.
+  - \"evidence\": the concrete proof quoted from the Personal Data (a role, institution, or skill).
+  - Do not invent, infer, or embellish. Only pairs with literal support in the Personal Data.
+- Add a \"labels\" object with the category names (experience, education, skills) written in the same language as the Job Description.
+- Add a \"profile\" object with the candidate's personal info from the Personal Data: full_name, target_role, email, phone, location, linkedin, github. Copy the values as-is.
+- Write every value in the same language as the Job Description.
+- Reply with RAW JSON ONLY. No code fences, no commentary, no markdown. The JSON must have this exact shape:
+
+{
+  \"profile\": {\"full_name\": \"...\", \"target_role\": \"...\", \"email\": \"...\", \"phone\": \"...\", \"location\": \"...\", \"linkedin\": \"...\", \"github\": \"...\"},
+  \"labels\": {\"experience\": \"...\", \"education\": \"...\", \"skills\": \"...\"},
+  \"experience\": [{ \"requirement\": \"...\", \"evidence\": \"...\" }],
+  \"education\": [{ \"requirement\": \"...\", \"evidence\": \"...\" }],
+  \"skills\": [{ \"requirement\": \"...\", \"evidence\": \"...\" }]
+}
 
 === Personal Data ===
 $PERSONAL_DATA
 
 === Job Description ===
-$JOB_DESC
-
-=== Structure Rules ===
-$RULES"
+$JOB_DESC"
 
 # Create a session
 SESSION_BODY=$(jq -n --arg title "$JOB_TITLE" '{title: $title}')
@@ -247,14 +192,13 @@ if [ -z "$SESSION_ID" ]; then
 fi
 
 # Construct the JSON payload securely using jq, injecting the selected model.
-# tools: {} disables agent tool calls so the model returns the resume as text
-# (the script itself writes resume.txt) instead of writing files on its own.
+# tools: {} disables agent tool calls so the model returns the matches as text
+# (the script itself writes matches.txt) instead of writing files on its own.
 PAYLOAD=$(jq -n \
     --arg provider "$PROVIDER_ID" \
     --arg model "$MODEL_ID" \
-    --arg sys "$SYSTEM_PROMPT" \
     --arg txt "$USER_PROMPT" \
-    '{model: {providerID: $provider, modelID: $model}, system: $sys, tools: {}, parts: [{type: "text", text: $txt}]}')
+    '{model: {providerID: $provider, modelID: $model}, tools: {}, parts: [{type: "text", text: $txt}]}')
 
 # Make the API call and save the response
 TMP_RESPONSE=$(mktemp)
@@ -277,13 +221,35 @@ if [ -n "$ERROR_MSG" ]; then
     exit 1
 fi
 
-# Extract the assistant's text parts (skips reasoning/step markers) and save them
-RESUME_TEXT=$(jq -r '[.parts[] | select(.type == "text") | .text] | join("")' "$TMP_RESPONSE")
+# Extract the assistant's text parts (skips reasoning/step markers)
+MATCHES_TEXT=$(jq -r '[.parts[] | select(.type == "text") | .text] | join("")' "$TMP_RESPONSE")
 
-if [ -z "$RESUME_TEXT" ]; then
+if [ -z "$MATCHES_TEXT" ]; then
     echo "❌ opencode returned no text response."
     exit 1
 fi
 
-echo "$RESUME_TEXT" > "$DIR_NAME/resume.txt"
-echo -e "\n✅ Success! Your tailored resume has been generated and saved at: $DIR_NAME/resume.txt"
+# Defensively strip a JSON code fence in case the model wraps its reply despite instructions
+MATCHES_JSON=$(printf '%s' "$MATCHES_TEXT" | sed -e 's/^```json[[:space:]]*//' -e 's/^```[[:space:]]*//' -e 's/```[[:space:]]*$//')
+
+# Validate the JSON shape before writing anything
+if ! printf '%s' "$MATCHES_JSON" | jq -e '.profile and (.experience|type=="array") and (.education|type=="array") and (.skills|type=="array")' &> /dev/null; then
+    echo "❌ opencode returned invalid JSON. Expected {profile, labels, experience, education, skills}."
+    echo "Raw response (first 800 chars):"
+    printf '%s' "$MATCHES_TEXT" | head -c 800
+    echo ""
+    exit 1
+fi
+
+echo "$MATCHES_JSON" > "$DIR_NAME/matches.txt"
+echo -e "\n✅ Matches saved at: $DIR_NAME/matches.txt"
+
+# 8. Build the HTML resume from the matches
+echo "Building HTML resume with JavaResumeBuilder..."
+if java --enable-native-access=ALL-UNNAMED JavaResumeBuilder.java "$DIR_NAME/matches.txt" "$DIR_NAME/resume.html"; then
+    echo -e "\n✅ Success! Match report saved at: $DIR_NAME/matches.txt"
+    echo "✅ HTML resume generated at: $DIR_NAME/resume.html"
+else
+    echo "❌ JavaResumeBuilder failed. See the errors above."
+    exit 1
+fi
