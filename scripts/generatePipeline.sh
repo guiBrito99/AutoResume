@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
 # Configurable server location (override with env vars)
 OPENCODE_URL="${OPENCODE_URL:-http://localhost:4096}"
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
@@ -14,12 +18,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 0. Resolve dependencies
-echo -e "Checking and installing dependencies...\n"
+# 0. Verify dependencies (install is an explicit menu action)
+missing_deps() {
+    local missing=()
+    command -v jq &>/dev/null || missing+=("jq")
+    command -v curl &>/dev/null || missing+=("curl")
+    command -v java &>/dev/null || missing+=("java")
+    command -v javac &>/dev/null || missing+=("javac")
+    command -v opencode &>/dev/null || missing+=("opencode")
+    [ -f "$PROJECT_ROOT/sqlite-manager-complete.jar" ] || missing+=("sqlite-manager-complete.jar")
+    echo "${missing[@]}"
+}
 
-bash installDependencies.sh || exit 1
+DEPS=$(missing_deps)
+if [ -n "$DEPS" ]; then
+    echo "❌ Missing dependencies: $DEPS"
+    echo "   Run 'bash $PROJECT_ROOT/scripts/installDependencies.sh' to install them."
+    exit 1
+fi
 
-echo -e "\nAll dependencies are satisfied. Proceeding...\n"
+echo -e "All dependencies satisfied. Proceeding...\n"
 
 # 1. Ensure an opencode server is reachable (start one if needed)
 health_check() {
@@ -100,7 +118,7 @@ elif [ -f "./personalData.txt" ]; then
     cp "./personalData.txt" "$DIR_NAME/personalData.txt"
 else
     echo "Extracting personal data from database..."
-    DB_OUTPUT=$(java --enable-native-access=ALL-UNNAMED -jar sqlite-manager-complete.jar print)
+    DB_OUTPUT=$(java --enable-native-access=ALL-UNNAMED -jar "$PROJECT_ROOT/sqlite-manager-complete.jar" print)
 
     if [[ "$DB_OUTPUT" == *"No table to print"* ]]; then
         echo "❌ Error: The database is empty (returned 'No table to print')."
@@ -246,7 +264,7 @@ echo -e "\n✅ Matches saved at: $DIR_NAME/matches.txt"
 
 # 8. Build the HTML resume from the matches
 echo "Building HTML resume with JavaResumeBuilder..."
-if java --enable-native-access=ALL-UNNAMED JavaResumeBuilder.java "$DIR_NAME/matches.txt" "$DIR_NAME/resume.html"; then
+if java --enable-native-access=ALL-UNNAMED "$SCRIPT_DIR/JavaResumeBuilder.java" "$DIR_NAME/matches.txt" "$DIR_NAME/resume.html"; then
     echo -e "\n✅ Success! Match report saved at: $DIR_NAME/matches.txt"
     echo "✅ HTML resume generated at: $DIR_NAME/resume.html"
 else

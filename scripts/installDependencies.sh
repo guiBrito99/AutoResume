@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
 echo -e "Resolving dependencies for AutoResume...\n"
 
 resolve() {
@@ -82,7 +86,7 @@ echo -e "\n=== Building sqlite-manager-complete.jar ==="
 REPO_URL="https://github.com/guiBrito99/java-sqlite-manager.git"
 REPO_DIR="/tmp/java-sqlite-manager"
 
-if [ -f "sqlite-manager-complete.jar" ]; then
+if [ -f "$PROJECT_ROOT/sqlite-manager-complete.jar" ]; then
     echo "✅ sqlite-manager-complete.jar already exists. Skipping build."
 else
     if [ ! -d "$REPO_DIR" ]; then
@@ -106,17 +110,17 @@ else
         JAR_FILE=$(find target -name "*jar-with-dependencies.jar" -o -name "*complete.jar" -o -name "*-shaded.jar" 2>/dev/null | grep -v archive-tmp | head -1)
     fi
     if [ -n "$JAR_FILE" ] && [ -f "$JAR_FILE" ]; then
-        cp "$JAR_FILE" "$OLDPWD/sqlite-manager-complete.jar"
-        echo "✅ Built and copied to $OLDPWD/sqlite-manager-complete.jar"
+        cp "$JAR_FILE" "$PROJECT_ROOT/sqlite-manager-complete.jar"
+        echo "✅ Built and copied to $PROJECT_ROOT/sqlite-manager-complete.jar"
     else
         echo "❌ Failed to find built JAR in target/"
         exit 1
     fi
-    cd "$OLDPWD"
+    cd "$PROJECT_ROOT"
 fi
 
 if command -v ollama &> /dev/null; then
-    MAP_FILE="opencode.json"
+    MAP_FILE="$PROJECT_ROOT/opencode.json"
     if [ -f "$MAP_FILE" ]; then
         MODELS=$(jq -r '.provider.ollama.models | keys[]' "$MAP_FILE" 2>/dev/null)
         if [ -n "$MODELS" ]; then

@@ -16,7 +16,7 @@ Instead of manually rewriting your resume for every application, this project ac
 
 1. **The Database:** Your entire career history (roles, tech stack, highlights) is stored via the `java-sqlite-manager` CLI.
 2. **The Context:** You provide a target **Job Description** (pasted or from a master file). No structure rules or persona files are needed.
-3. **The Match Step:** `generateResume.sh` extracts your personal data, calls the opencode server with a prompt that demands a JSON match report, validates the JSON, and writes `matches.txt`.
+3. **The Match Step:** `generatePipeline.sh` extracts your personal data, calls the opencode server with a prompt that demands a JSON match report, validates the JSON, and writes `matches.txt`.
 4. **The Build Step:** The same script immediately runs `JavaResumeBuilder.java` on `matches.txt` to produce `resume.html`—header from your profile, one section per non-empty category, adaptive grid layout when items exceed a threshold.
 
 ## 📦 Prerequisites
@@ -35,11 +35,11 @@ The bundled `opencode.json` registers Ollama as a provider (`http://localhost:11
 
 ## 🚀 Quick Start
 
-1. Ensure your `sqlite-manager-complete.jar` and `generateResume.sh` are in the same root directory.
+1. Ensure your `sqlite-manager-complete.jar` and the `scripts/` folder are in the same root directory.
 2. Optionally, create a master `personalData.txt` file in the root directory to skip manual entry.
-3. Make the scripts executable: `chmod +x generateResume.sh installDependencies.sh`
-4. Install dependencies: `./installDependencies.sh` (will install jq, curl, JDK, opencode, and optionally Ollama).
-5. Run the pipeline: `./generateResume.sh`
+3. Make the scripts executable: `chmod +x run.sh scripts/installDependencies.sh`
+4. Install dependencies: `./run.sh` (choose option 1 to install jq, curl, JDK, opencode, and optionally Ollama).
+5. Run the pipeline: `./run.sh` (choose option 2 to generate a resume).
 
 ## ✅ Verification
 
@@ -48,6 +48,8 @@ Run the self-contained end-to-end test (starts an opencode server, feeds sample 
 ```bash
 bash testScript.sh
 ```
+
+The test script lives on the `dev` branch. On `main`, this test is not available since it is a dev-only artifact.
 
 The test asserts:
 - `test/matches.txt` exists and is valid JSON with `profile`, `labels`, `experience`, `education`, `skills`

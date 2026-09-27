@@ -1,8 +1,9 @@
 # Allowlist: only the files below are tracked, everything else is ignored.
 *
 !.gitignore
-!generateResume.sh
-!installDependencies.sh
-!JavaResumeBuilder.java
-!testScript.sh
+!run.sh
+!scripts/
+!scripts/generatePipeline.sh
+!scripts/installDependencies.sh
+!scripts/JavaResumeBuilder.java
 !README.md

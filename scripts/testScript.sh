@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT" || exit 1
+
 # Color formatting
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
@@ -31,7 +35,7 @@ trap cleanup EXIT
 
 # Setup paths and JVM arguments
 JAR_PATH="sqlite-manager-complete.jar"
-ABS_JAR_PATH="$PWD/$JAR_PATH"
+ABS_JAR_PATH="$PROJECT_ROOT/$JAR_PATH"
 JVM_ARGS="--enable-native-access=ALL-UNNAMED"
 
 echo -e "${CYAN}=== Generating Resume Database ===${NC}"
@@ -124,8 +128,8 @@ esac
 echo -e "Using model selection: $MODEL_CHOICE ($(opencode models 2>/dev/null | sed -n "${MODEL_CHOICE}p"))"
 
 # 4 - Main happy-path run: pass the selected model and "test" (folder name)
-echo -e "\n${CYAN}=== Running generateResume.sh (happy path) ===${NC}"
-printf '%s\ntest\n' "$MODEL_CHOICE" | bash generateResume.sh > main_out.txt 2>&1
+echo -e "\n${CYAN}=== Running generatePipeline.sh (happy path) ===${NC}"
+printf '%s\ntest\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > main_out.txt 2>&1
 MAIN_CODE=$?
 
 check "exits successfully" "test $MAIN_CODE -eq 0"
@@ -142,14 +146,14 @@ check "resume.html has Experience section" 'grep -q "Experiência\|Experience" t
 
 # 5 - Edge case: empty job title
 echo -e "\n${CYAN}=== Edge case: empty job title ===${NC}"
-printf '%s\n\n' "$MODEL_CHOICE" | bash generateResume.sh > edge_out.txt 2>&1
+printf '%s\n\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > edge_out.txt 2>&1
 EDGE_TITLE_CODE=$?
 check "rejects empty job title" "test $EDGE_TITLE_CODE -ne 0"
 check "prints job-title error" 'grep -q "Job title cannot be empty" edge_out.txt'
 
 # 6 - Edge case: empty pasted job description
 echo -e "\n${CYAN}=== Edge case: empty pasted job description ===${NC}"
-printf '%s\nedge_job\n' "$MODEL_CHOICE" | bash generateResume.sh > edge_out.txt 2>&1
+printf '%s\nedge_job\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > edge_out.txt 2>&1
 EDGE_JOB_CODE=$?
 check "rejects empty job description" "test $EDGE_JOB_CODE -ne 0"
 check "prints job-description error" 'grep -q "jobDescription.txt is empty" edge_out.txt'
@@ -157,7 +161,7 @@ check "prints job-description error" 'grep -q "jobDescription.txt is empty" edge
 # 7 - Edge case: empty database
 echo -e "\n${CYAN}=== Edge case: empty database ===${NC}"
 rm -f database.sqlite
-printf '%s\nedge_db\n' "$MODEL_CHOICE" | bash generateResume.sh > edge_out.txt 2>&1
+printf '%s\nedge_db\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > edge_out.txt 2>&1
 EDGE_DB_CODE=$?
 check "rejects empty database" "test $EDGE_DB_CODE -ne 0"
 check "prints empty-database error" 'grep -q "database is empty" edge_out.txt'
