@@ -77,6 +77,44 @@ if ! command -v jq &> /dev/null || ! command -v curl &> /dev/null || \
     exit 1
 fi
 
+# Build sqlite-manager-complete.jar from source
+echo -e "\n=== Building sqlite-manager-complete.jar ==="
+REPO_URL="https://github.com/guiBrito99/java-sqlite-manager.git"
+REPO_DIR="/tmp/java-sqlite-manager"
+
+if [ -f "sqlite-manager-complete.jar" ]; then
+    echo "✅ sqlite-manager-complete.jar already exists. Skipping build."
+else
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Cloning java-sqlite-manager..."
+        git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+    fi
+    cd "$REPO_DIR"
+    echo "Building fat JAR with Maven..."
+    if command -v mvn &> /dev/null; then
+        mvn clean package -DskipTests -q
+    elif [ -f "./mvnw" ]; then
+        ./mvnw clean package -DskipTests -q
+    else
+        echo "❌ Maven not found. Please install Maven or run the build manually."
+        exit 1
+    fi
+    # Find the fat jar (prefer the one directly in target/, not in archive-tmp/)
+    JAR_FILE=$(find target -maxdepth 1 -name "sqlite-manager-complete.jar" 2>/dev/null | head -1)
+    if [ -z "$JAR_FILE" ] || [ ! -f "$JAR_FILE" ]; then
+        # Fallback: try jar-with-dependencies pattern
+        JAR_FILE=$(find target -name "*jar-with-dependencies.jar" -o -name "*complete.jar" -o -name "*-shaded.jar" 2>/dev/null | grep -v archive-tmp | head -1)
+    fi
+    if [ -n "$JAR_FILE" ] && [ -f "$JAR_FILE" ]; then
+        cp "$JAR_FILE" "$OLDPWD/sqlite-manager-complete.jar"
+        echo "✅ Built and copied to $OLDPWD/sqlite-manager-complete.jar"
+    else
+        echo "❌ Failed to find built JAR in target/"
+        exit 1
+    fi
+    cd "$OLDPWD"
+fi
+
 if command -v ollama &> /dev/null; then
     MAP_FILE="opencode.json"
     if [ -f "$MAP_FILE" ]; then
