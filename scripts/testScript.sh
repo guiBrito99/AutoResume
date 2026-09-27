@@ -71,7 +71,10 @@ java $JVM_ARGS -jar "$ABS_JAR_PATH" insert Skills id,category,skill_name 5,Archi
 echo -e "\n${CYAN}=== Final Database State ===${NC}"
 java $JVM_ARGS -jar "$ABS_JAR_PATH" print
 
-# 2 - Create the folder test with its job description
+# 2 - Reset the test folder so the run is hermetic.
+# Removes stale personalData.txt (which would short-circuit DB extraction) and
+# leftover persona.txt / structureRules.txt / resume.txt from the old pipeline.
+rm -rf test
 mkdir -p test
 
 cat << 'EOF' > test/jobDescription.txt
@@ -127,9 +130,11 @@ esac
 
 echo -e "Using model selection: $MODEL_CHOICE ($(opencode models 2>/dev/null | sed -n "${MODEL_CHOICE}p"))"
 
-# 4 - Main happy-path run: pass the selected model and "test" (folder name)
-echo -e "\n${CYAN}=== Running generatePipeline.sh (happy path) ===${NC}"
-printf '%s\ntest\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > main_out.txt 2>&1
+# 4 - Main happy-path run: pass "test" (job folder name) then the model choice.
+# The job description is pre-seeded in test/jobDescription.txt, so the collector
+# skips its paste prompt and only the title and model lines are consumed.
+echo -e "\n${CYAN}=== Running generateResume.sh (happy path) ===${NC}"
+printf 'test\n%s\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generateResume.sh" > main_out.txt 2>&1
 MAIN_CODE=$?
 
 check "exits successfully" "test $MAIN_CODE -eq 0"
@@ -145,23 +150,30 @@ check "resume.html contains candidate name" 'grep -qi "jane" test/resume.html'
 check "resume.html has Experience section" 'grep -q "Experiência\|Experience" test/resume.html'
 
 # 5 - Edge case: empty job title
+# Only the title is read, so a single blank line is enough.
 echo -e "\n${CYAN}=== Edge case: empty job title ===${NC}"
-printf '%s\n\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > edge_out.txt 2>&1
+printf '\n' | bash "$SCRIPT_DIR/generateResume.sh" > edge_out.txt 2>&1
 EDGE_TITLE_CODE=$?
 check "rejects empty job title" "test $EDGE_TITLE_CODE -ne 0"
 check "prints job-title error" 'grep -q "Job title cannot be empty" edge_out.txt'
 
 # 6 - Edge case: empty pasted job description
+# Pre-seed an EMPTY jobDescription.txt so the collector skips its paste (which
+# would otherwise swallow the piped model line) and the emptiness guard fires.
 echo -e "\n${CYAN}=== Edge case: empty pasted job description ===${NC}"
-printf '%s\nedge_job\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > edge_out.txt 2>&1
+mkdir -p edge_job && : > edge_job/jobDescription.txt
+printf 'edge_job\n%s\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generateResume.sh" > edge_out.txt 2>&1
 EDGE_JOB_CODE=$?
 check "rejects empty job description" "test $EDGE_JOB_CODE -ne 0"
 check "prints job-description error" 'grep -q "jobDescription.txt is empty" edge_out.txt'
 
 # 7 - Edge case: empty database
+# Pre-seed a real jobDescription.txt so the collector skips its paste and the
+# run reaches infoMatcher.sh, which then fails on the removed database.
 echo -e "\n${CYAN}=== Edge case: empty database ===${NC}"
+mkdir -p edge_db && cp test/jobDescription.txt edge_db/jobDescription.txt
 rm -f database.sqlite
-printf '%s\nedge_db\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generatePipeline.sh" > edge_out.txt 2>&1
+printf 'edge_db\n%s\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generateResume.sh" > edge_out.txt 2>&1
 EDGE_DB_CODE=$?
 check "rejects empty database" "test $EDGE_DB_CODE -ne 0"
 check "prints empty-database error" 'grep -q "database is empty" edge_out.txt'

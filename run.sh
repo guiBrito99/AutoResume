@@ -46,7 +46,7 @@ while true; do
                     echo -e "\n${RED}⚠️  Cannot generate a resume yet. Missing: $DEPS${NC}"
                     echo "    Run option 1 to install dependencies first."
                 else
-                    bash "$PROJECT_ROOT/scripts/generatePipeline.sh"
+                    bash "$PROJECT_ROOT/scripts/generateResume.sh"
                 fi
                 break
                 ;;
