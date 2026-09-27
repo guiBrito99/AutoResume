@@ -6,4 +6,5 @@
 !scripts/generatePipeline.sh
 !scripts/installDependencies.sh
 !scripts/JavaResumeBuilder.java
+!scripts/testScript.sh
 !README.md
