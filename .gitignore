@@ -3,7 +3,9 @@
 !.gitignore
 !run.sh
 !scripts/
-!scripts/generatePipeline.sh
+!scripts/collectJobDescription.sh
+!scripts/generateResume.sh
+!scripts/infoMatcher.sh
 !scripts/installDependencies.sh
 !scripts/JavaResumeBuilder.java
 !README.md

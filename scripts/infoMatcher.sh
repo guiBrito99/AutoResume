@@ -97,8 +97,12 @@ if [ -z "$PROVIDER_ID" ] || [ -z "$MODEL_ID" ]; then
     exit 1
 fi
 
-# 3. Ask for the name of the job title
-read -p "Enter the job title (this will be used as the folder name): " JOB_TITLE
+# 3. Job title (passed as $1 by generateResume.sh, or prompted for when run standalone)
+JOB_TITLE="${1:-}"
+
+if [ -z "$JOB_TITLE" ]; then
+    read -p "Enter the job title (this will be used as the folder name): " JOB_TITLE
+fi
 
 if [ -z "$JOB_TITLE" ]; then
     echo "❌ Job title cannot be empty."
@@ -260,14 +264,4 @@ if ! printf '%s' "$MATCHES_JSON" | jq -e '.profile and (.experience|type=="array
 fi
 
 echo "$MATCHES_JSON" > "$DIR_NAME/matches.txt"
-echo -e "\n✅ Matches saved at: $DIR_NAME/matches.txt"
-
-# 8. Build the HTML resume from the matches
-echo "Building HTML resume with JavaResumeBuilder..."
-if java --enable-native-access=ALL-UNNAMED "$SCRIPT_DIR/JavaResumeBuilder.java" "$DIR_NAME/matches.txt" "$DIR_NAME/resume.html"; then
-    echo -e "\n✅ Success! Match report saved at: $DIR_NAME/matches.txt"
-    echo "✅ HTML resume generated at: $DIR_NAME/resume.html"
-else
-    echo "❌ JavaResumeBuilder failed. See the errors above."
-    exit 1
-fi
+echo -e "\n✅ Match report saved at: $DIR_NAME/matches.txt"

@@ -14,10 +14,14 @@ Instead of manually rewriting your resume for every application, this project ac
 
 ## 🛠️ How It Works
 
+The pipeline is split into small single-purpose scripts, orchestrated by `generateResume.sh`:
+
 1. **The Database:** Your entire career history (roles, tech stack, highlights) is stored via the `java-sqlite-manager` CLI.
-2. **The Context:** You provide a target **Job Description** (pasted or from a master file). No structure rules or persona files are needed.
-3. **The Match Step:** `generatePipeline.sh` extracts your personal data, calls the opencode server with a prompt that demands a JSON match report, validates the JSON, and writes `matches.txt`.
-4. **The Build Step:** The same script immediately runs `JavaResumeBuilder.java` on `matches.txt` to produce `resume.html`—header from your profile, one section per non-empty category, adaptive grid layout when items exceed a threshold.
+2. **Collect:** `collectJobDescription.sh` asks for the job title, creates the per-job folder, and saves the pasted **Job Description** to `jobDescription.txt`. No structure rules or persona files are needed.
+3. **Match:** `infoMatcher.sh` extracts your personal data (from the database, or a master `personalData.txt`), calls the opencode server with a prompt that demands a JSON match report, validates the JSON, and writes `matches.txt`.
+4. **Build:** `JavaResumeBuilder.java` runs on `matches.txt` to produce `resume.html`—header from your profile, one section per non-empty category, adaptive grid layout when items exceed a threshold.
+
+Each step also runs standalone: `infoMatcher.sh` on its own gives you matches-only output, and `collectJobDescription.sh` only handles the description.
 
 ## 📦 Prerequisites
 
@@ -46,10 +50,10 @@ The bundled `opencode.json` registers Ollama as a provider (`http://localhost:11
 Run the self-contained end-to-end test (starts an opencode server, feeds sample data, and asserts the output):
 
 ```bash
-bash testScript.sh
+bash scripts/testScript.sh
 ```
 
-The test script lives on the `dev` branch. On `main`, this test is not available since it is a dev-only artifact.
+The test script lives on the `dev` branch. On `main`, this test is not available since it is a dev-only artifact. It defaults to the first model from `opencode models`; pass `TEST_MODEL=<n>` to pick a different one, or run it interactively to choose from a list.
 
 The test asserts:
 - `test/matches.txt` exists and is valid JSON with `profile`, `labels`, `experience`, `education`, `skills`
