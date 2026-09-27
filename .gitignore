@@ -1,19 +1,6 @@
-# Runtime database created by testScript.sh / generateResume.sh
-database.sqlite
-*.sqlite
-
-# Master templates and generated context files (may contain personal data)
-/personalData.txt
-/structureRules.txt
-/persona.txt
-
-# Per-job generated output
-/resume.txt
-
-# Test artifacts
-/test/
-edge_*/
-*_out.txt
-
-# Logs
-*.log
+# Allowlist: only the files below are tracked, everything else is ignored.
+*
+!.gitignore
+!generateResume.sh
+!README.md
+!sqlite-manager-complete.jar
