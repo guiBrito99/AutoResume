@@ -1,7 +1,16 @@
 #!/bin/bash
 
+# Wrapper: the menu entry point.
+#
+# Sits at the project root (rather than in scripts/wrapper/) so ./run.sh is the
+# obvious way in. Calls the foundation scripts; holds no domain logic itself.
+
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT" || exit 1
+
+SCRIPTS_DIR="$PROJECT_ROOT/scripts"
+FOUNDATION="$SCRIPTS_DIR/foundation"
+WRAPPER="$SCRIPTS_DIR/wrapper"
 
 # Color formatting
 CYAN='\033[0;36m'
@@ -10,43 +19,36 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Check which dependencies are missing
-missing_deps() {
-    local missing=()
-    command -v jq &>/dev/null || missing+=("jq")
-    command -v curl &>/dev/null || missing+=("curl")
-    command -v java &>/dev/null || missing+=("java")
-    command -v javac &>/dev/null || missing+=("javac")
-    command -v opencode &>/dev/null || missing+=("opencode")
-    [ -f "$PROJECT_ROOT/sqlite-manager-complete.jar" ] || missing+=("sqlite-manager-complete.jar")
-    echo "${missing[@]}"
-}
-
-# Passive status line at launch
-DEPS=$(missing_deps)
+# Passive dependency status line, delegated to the foundation script.
+DEPS=$(bash "$FOUNDATION/checkDependencies.sh" || true)
 if [ -n "$DEPS" ]; then
-    echo -e "Dependencies: ${YELLOW}not installed${NC} — use option 1 to install"
+    echo -e "Dependencies: ${YELLOW}not installed${NC} — use option 1 ($DEPS)"
 else
     echo -e "Dependencies: ${GREEN}ready${NC}"
 fi
 
-# Menu loop
 while true; do
     echo -e "\n${CYAN}=== AutoResume ===${NC}"
     PS3="Select an option: "
     select OPTION in "Install dependencies" "Generate resume" "Exit"; do
         case $REPLY in
             1)
-                bash "$PROJECT_ROOT/scripts/installDependencies.sh"
+                # Installing is always explicit, and is the only place the
+                # installer trio is chained together.
+                bash "$FOUNDATION/installDependencies.sh" &&
+                    bash "$FOUNDATION/buildSqliteManager.sh" &&
+                    bash "$FOUNDATION/pullOllamaModels.sh" &&
+                    bash "$FOUNDATION/checkDependencies.sh" &&
+                    echo -e "\n${GREEN}✅ Dependencies ready.${NC}"
                 break
                 ;;
             2)
-                DEPS=$(missing_deps)
+                DEPS=$(bash "$FOUNDATION/checkDependencies.sh" || true)
                 if [ -n "$DEPS" ]; then
                     echo -e "\n${RED}⚠️  Cannot generate a resume yet. Missing: $DEPS${NC}"
                     echo "    Run option 1 to install dependencies first."
                 else
-                    bash "$PROJECT_ROOT/scripts/generateResume.sh"
+                    bash "$WRAPPER/generateResume.sh"
                 fi
                 break
                 ;;

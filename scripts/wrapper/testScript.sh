@@ -1,7 +1,18 @@
 #!/bin/bash
 
+# Wrapper: the end-to-end test harness.
+#
+# The HTML builder edge-case block runs before the model gate, so those checks
+# work fully offline. The pipeline checks after it need opencode with at least
+# one available model.
+
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+FOUNDATION="$SCRIPTS_DIR/foundation"
+GENERATE="$SCRIPT_DIR/generateResume.sh"
+RESUME_BUILDER="$FOUNDATION/resumeBuilder.sh"
+
 cd "$PROJECT_ROOT" || exit 1
 
 # Color formatting
@@ -29,7 +40,7 @@ check() { # check <name> <command-string>
 # Robust cleanup: run on every exit, even mid-test failures
 cleanup() {
     rm -f database.sqlite edge_out.txt main_out.txt
-    rm -rf edge_db edge_title edge_job
+    rm -rf edge_db edge_title edge_job builder_fixtures
 }
 trap cleanup EXIT
 
@@ -103,10 +114,65 @@ Nice to Have:
 - Familiarity with CI/CD pipelines.
 EOF
 
-# 3 - Choose which model to run the test against
+# 3 - HTML builder edge cases. These run resumeBuilder.sh directly on fixtures,
+# so they need no model and no opencode server. Placed before the model gate on
+# purpose: this block is a standalone offline smoke test.
+echo -e "\n${CYAN}=== HTML builder edge cases (offline) ===${NC}"
+FIX="builder_fixtures"
+mkdir -p "$FIX"
+
+cat << 'EOF' > "$FIX/labels.json"
+{
+  "profile": {"full_name": "Jane Doe", "target_role": "Data Engineer", "email": "jane@example.com"},
+  "labels": {"experience": "Experiência", "education": "Formação", "skills": "Habilidades"},
+  "experience": [{"requirement": "Python", "evidence": "Backend"}],
+  "education": [{"requirement": "CS", "evidence": "State_University"}],
+  "skills": [{"requirement": "Bash", "evidence": "Scripting"}]
+}
+EOF
+
+cat << 'EOF' > "$FIX/nolabels.json"
+{
+  "profile": {"full_name": "Jane Doe"},
+  "experience": [{"requirement": "Python", "evidence": "Backend"}],
+  "education": [],
+  "skills": [{"requirement": "Bash", "evidence": "Scripting"}]
+}
+EOF
+
+cat << 'EOF' > "$FIX/escape.json"
+{
+  "profile": {"full_name": "A & B <C> \"D\""},
+  "experience": [],
+  "education": [],
+  "skills": [{"requirement": "x & y <z>", "evidence": "q \" r"}]
+}
+EOF
+
+echo 'this is not json at all' > "$FIX/broken.json"
+
+bash "$RESUME_BUILDER" "$FIX/labels.json" "$FIX/labels.html" &> /dev/null
+check "builder renders localized labels" 'grep -q "Experiência" builder_fixtures/labels.html'
+
+bash "$RESUME_BUILDER" "$FIX/escape.json" "$FIX/escape.html" &> /dev/null
+check "builder escapes ampersands and angle brackets" 'grep -q "A &amp; B &lt;C&gt;" builder_fixtures/escape.html'
+check "builder does not emit raw angle brackets from values" '! grep -q "<z>" builder_fixtures/escape.html'
+
+bash "$RESUME_BUILDER" "$FIX/nolabels.json" "$FIX/nolabels.html" &> /dev/null
+check "builder falls back to English headings without labels" 'grep -q "<h2>Experience</h2>" builder_fixtures/nolabels.html'
+check "builder omits an empty category" '! grep -q "<h2>Education</h2>" builder_fixtures/nolabels.html'
+check "builder omits absent optional contact fields" '! grep -q "mailto:" builder_fixtures/nolabels.html'
+
+# `|| true`: the builder is expected to fail here, and `set -e` would otherwise
+# abort the whole suite before the assertion could run.
+bash "$RESUME_BUILDER" "$FIX/broken.json" "$FIX/broken.html" &> /dev/null || true
+check "builder rejects malformed JSON" 'test ! -s builder_fixtures/broken.html'
+
+# 4 - Choose which model to run the pipeline test against
 MODEL_CHOICE="${TEST_MODEL:-}"
 if [ -z "$MODEL_CHOICE" ]; then
-    AVAILABLE_MODELS=$(opencode models 2>/dev/null)
+    # `|| true` so an unavailable CLI reaches the empty-list check below.
+    AVAILABLE_MODELS=$(opencode models 2>/dev/null || true)
     if [ -z "$AVAILABLE_MODELS" ]; then
         echo -e "${RED}❌ No models available. Run 'opencode auth login' or add a provider first.${NC}"
         exit 1
@@ -114,7 +180,7 @@ if [ -z "$MODEL_CHOICE" ]; then
     if [ -t 0 ]; then
         echo -e "\n${CYAN}Available models:${NC}"
         nl -w2 -s'. ' <<< "$AVAILABLE_MODELS"
-        read -r -p "Enter the number of the model to test (default: 1): " MODEL_CHOICE
+        read -r -p "Enter the number of the model to test (default: 1): " MODEL_CHOICE || true
         MODEL_CHOICE="${MODEL_CHOICE:-1}"
     else
         MODEL_CHOICE=1
@@ -128,14 +194,16 @@ case "$MODEL_CHOICE" in
         ;;
 esac
 
-echo -e "Using model selection: $MODEL_CHOICE ($(opencode models 2>/dev/null | sed -n "${MODEL_CHOICE}p"))"
+# `|| true` inside the substitution: opencode may exit non-zero with nothing usable.
+SELECTED_MODEL=$(opencode models 2>/dev/null | sed -n "${MODEL_CHOICE}p" || true)
+echo -e "Using model selection: $MODEL_CHOICE ($SELECTED_MODEL)"
 
-# 4 - Main happy-path run: pass "test" (job folder name) then the model choice.
-# The job description is pre-seeded in test/jobDescription.txt, so the collector
-# skips its paste prompt and only the title and model lines are consumed.
+# 5 - Main happy-path run. The job title and model are passed as arguments, so
+# nothing is read from stdin at all. test/jobDescription.txt is pre-seeded, so
+# the collector skips its paste prompt.
 echo -e "\n${CYAN}=== Running generateResume.sh (happy path) ===${NC}"
-printf 'test\n%s\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generateResume.sh" > main_out.txt 2>&1
-MAIN_CODE=$?
+MAIN_CODE=0
+bash "$GENERATE" test "$SELECTED_MODEL" > main_out.txt 2>&1 || MAIN_CODE=$?
 
 check "exits successfully" "test $MAIN_CODE -eq 0"
 check "creates matches.txt" 'test -s test/matches.txt'
@@ -149,36 +217,37 @@ check "creates resume.html" 'test -s test/resume.html'
 check "resume.html contains candidate name" 'grep -qi "jane" test/resume.html'
 check "resume.html has Experience section" 'grep -q "Experiência\|Experience" test/resume.html'
 
-# 5 - Edge case: empty job title
-# Only the title is read, so a single blank line is enough.
+# 6 - Edge case: empty job title
+# The title arg is empty and no stdin is piped, so askJobTitle.sh prompts and
+# immediately hits EOF, producing the empty-title rejection.
 echo -e "\n${CYAN}=== Edge case: empty job title ===${NC}"
-printf '\n' | bash "$SCRIPT_DIR/generateResume.sh" > edge_out.txt 2>&1
-EDGE_TITLE_CODE=$?
+EDGE_TITLE_CODE=0
+bash "$GENERATE" </dev/null > edge_out.txt 2>&1 || EDGE_TITLE_CODE=$?
 check "rejects empty job title" "test $EDGE_TITLE_CODE -ne 0"
 check "prints job-title error" 'grep -q "Job title cannot be empty" edge_out.txt'
 
-# 6 - Edge case: empty pasted job description
+# 7 - Edge case: empty pasted job description
 # Pre-seed an EMPTY jobDescription.txt so the collector skips its paste (which
-# would otherwise swallow the piped model line) and the emptiness guard fires.
+# would otherwise block on stdin) and the emptiness guard fires.
 echo -e "\n${CYAN}=== Edge case: empty pasted job description ===${NC}"
 mkdir -p edge_job && : > edge_job/jobDescription.txt
-printf 'edge_job\n%s\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generateResume.sh" > edge_out.txt 2>&1
-EDGE_JOB_CODE=$?
+EDGE_JOB_CODE=0
+bash "$GENERATE" edge_job "$SELECTED_MODEL" </dev/null > edge_out.txt 2>&1 || EDGE_JOB_CODE=$?
 check "rejects empty job description" "test $EDGE_JOB_CODE -ne 0"
 check "prints job-description error" 'grep -q "jobDescription.txt is empty" edge_out.txt'
 
-# 7 - Edge case: empty database
+# 8 - Edge case: empty database
 # Pre-seed a real jobDescription.txt so the collector skips its paste and the
-# run reaches infoMatcher.sh, which then fails on the removed database.
+# run reaches collectPersonalData.sh, which then fails on the removed database.
 echo -e "\n${CYAN}=== Edge case: empty database ===${NC}"
 mkdir -p edge_db && cp test/jobDescription.txt edge_db/jobDescription.txt
 rm -f database.sqlite
-printf 'edge_db\n%s\n' "$MODEL_CHOICE" | bash "$SCRIPT_DIR/generateResume.sh" > edge_out.txt 2>&1
-EDGE_DB_CODE=$?
+EDGE_DB_CODE=0
+bash "$GENERATE" edge_db "$SELECTED_MODEL" </dev/null > edge_out.txt 2>&1 || EDGE_DB_CODE=$?
 check "rejects empty database" "test $EDGE_DB_CODE -ne 0"
 check "prints empty-database error" 'grep -q "database is empty" edge_out.txt'
 
-# 8 - Summary + cleanup (trap removes root artifacts)
+# 9 - Summary + cleanup (trap removes root artifacts)
 echo -e "\n${CYAN}=== Results ===${NC}"
 echo -e "${GREEN}${PASS} passed${NC} | ${RED}${FAIL} failed${NC}"
 if [ "$FAIL" -gt 0 ]; then
