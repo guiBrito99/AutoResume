@@ -54,7 +54,7 @@ Run the self-contained end-to-end test (starts an opencode server, feeds sample 
 bash scripts/wrapper/testScript.sh
 ```
 
-The test script lives on the `dev` branch. On `main`, this test is not available since it is a dev-only artifact. It defaults to the first model from `opencode models`; pass `TEST_MODEL=<n>` to pick a different one, or run it interactively to choose from a list.
+It defaults to the first model from `opencode models`; pass `TEST_MODEL=<n>` to pick a different one, or run it interactively to choose from a list.
 
 The test asserts 24 checks:
 - **HTML builder edge cases (offline, no model needed):** localized labels, label fallback, empty category omitted, absent optional contact fields, `&`/`<`/`>`/quote escaping, malformed-JSON rejection
@@ -90,7 +90,7 @@ scripts/foundation/                 # one job each; never invokes another projec
   resumeBuilder.sh                  #   writes <job>/resume.html
 scripts/wrapper/                    # compose foundation scripts
   generateResume.sh                 #   the pipeline
-  testScript.sh                     #   the test harness (dev branch only)
+  testScript.sh                     #   the test harness
 ```
 
 The layer rule is mechanical: **a script that invokes another project script is a

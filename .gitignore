@@ -21,3 +21,4 @@
 !scripts/foundation/startOpencodeServer.sh
 !scripts/wrapper/
 !scripts/wrapper/generateResume.sh
+!scripts/wrapper/testScript.sh
