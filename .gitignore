@@ -1,11 +1,23 @@
 # Allowlist: only the files below are tracked, everything else is ignored.
+# Directory negations (!scripts/foundation/ etc.) must precede their file entries:
+# git cannot re-include a file whose parent directory is excluded.
 *
 !.gitignore
 !run.sh
-!scripts/
-!scripts/collectJobDescription.sh
-!scripts/generateResume.sh
-!scripts/infoMatcher.sh
-!scripts/installDependencies.sh
-!scripts/JavaResumeBuilder.java
 !README.md
+!scripts/
+!scripts/common.sh
+!scripts/foundation/
+!scripts/foundation/askJobTitle.sh
+!scripts/foundation/buildSqliteManager.sh
+!scripts/foundation/checkDependencies.sh
+!scripts/foundation/collectJobDescription.sh
+!scripts/foundation/collectPersonalData.sh
+!scripts/foundation/infoMatcher.sh
+!scripts/foundation/installDependencies.sh
+!scripts/foundation/pullOllamaModels.sh
+!scripts/foundation/resumeBuilder.sh
+!scripts/foundation/selectModel.sh
+!scripts/foundation/startOpencodeServer.sh
+!scripts/wrapper/
+!scripts/wrapper/generateResume.sh
